@@ -28,20 +28,20 @@ const agent = createAgent({
 
 
 // 第五步：调用 Agent 并输出结果
-// const result = await agent.invoke({
-//   messages: [{ role: "user", content: "介绍一下你自己？" }],
-// });
-// console.log(result.messages.at(-1)?.content);
+const result = await agent.invoke({
+  messages: [{ role: "user", content: "介绍一下你自己？" }],
+});
+console.log(result.messages.at(-1)?.content);
 
-// 使用 stream() 替代 invoke()
-const stream = await agent.stream(
-  { messages: [{ role: "user", content: "广州天气怎么样？" }] },
-  { streamMode: "messages" }  //  逐 Token 流式输出
-);
+// // 使用 stream() 替代 invoke()
+// const stream = await agent.stream(
+//   { messages: [{ role: "user", content: "广州天气怎么样？" }] },
+//   { streamMode: "messages" }  //  逐 Token 流式输出 ，并返回消息
+// );
 
 // 遍历流式数据
-for await (const [message, metadata] of stream) {
-  process.stdout.write(message.content as string);
-}
+// for await (const [message, metadata] of stream) {
+//   process.stdout.write(message.content as string);
+// }
 
 
