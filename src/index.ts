@@ -6,14 +6,14 @@ import "dotenv/config";
 // 第二步：导入 LangChain 核心功能
 import { AIMessage, createAgent } from "langchain";
 import { ChatOpenAI } from "@langchain/openai";
-import { getWeather } from "./weather.js";
-import { getTime } from "./time.js";
+import { getWeather } from "./tools/weather.js";
+import { getTime } from "./tools/time.js";
 
 // 第四步：创建 Agent
 
 // 模型需要先创建一个模型实例
 const model = new ChatOpenAI({
-  modelName: "deepseek-v4-flash",
+  model: "deepseek-v4-flash",
   apiKey: process.env.DEEPSEEK_API_KEY, 
   configuration: {
     baseURL: process.env.DEEPSEEK_API_URL,

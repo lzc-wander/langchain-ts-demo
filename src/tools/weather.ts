@@ -47,8 +47,6 @@ async function fetchRealWeather({ city }: { city: string }): Promise<string> {
 
     const advice = getAdvice(data.weather[0]?.id);
 
-    console.log(data);
-
     return `${city}今日天气：${condition}，当前温度 ${temp}°C（体感 ${feelsLike}°C），湿度 ${humidity}%，${windDir}风 ${windLevel}，最高 ${high}°C / 最低 ${low}°C。${advice}`;
   } catch (error: unknown) {
     if (error instanceof DOMException && error.name === "AbortError") {
