@@ -2,8 +2,10 @@
 
 import "dotenv/config";
 import { SemanticSimilarityExampleSelector } from "@langchain/core/example_selectors";
-import { FakeEmbeddings } from "@langchain/core/utils/testing";
+import { FakeEmbeddings } from "@langchain/core/utils/testing"; // 测试用的向量嵌入器， 生成环境应该使用 OpenAIEmbeddings 等实际的向量嵌入器
 import { MemoryVectorStore } from "@langchain/classic/vectorstores/memory";
+import { ChatPromptTemplate, FewShotChatMessagePromptTemplate } from "@langchain/core/prompts";
+import model from "@/agent/index";
 
 // 准备大量示例
 const allExamples = [
@@ -23,15 +25,31 @@ const exampleSelector = await SemanticSimilarityExampleSelector.fromExamples(
   { k: 2 }                  // 选择最相似的 2 个示例
 );
 
-// 测试：根据输入动态选择示例
-const selectedExamples = await exampleSelector.selectExamples({
-  input: "我想退款，怎么操作？",
+// 定义示例的格式
+const examplePrompt = ChatPromptTemplate.fromMessages([
+  ["human", "{input}"],
+  ["ai", "{output}"],
+]);
+
+
+const fewShotPrompt = new FewShotChatMessagePromptTemplate({
+  examplePrompt,
+  exampleSelector,  // 使用选择器替代固定示例
+  inputVariables: ["input"],
 });
 
-console.log(selectedExamples);
-// 会选出与"退款/退货"最相关的示例，如：
-// [
-//   { input: "怎么申请退款？", output: "退款相关回答..." },
-//   { input: "退货流程是什么？", output: "退货相关回答..." }
-// ]
+const finalPrompt = ChatPromptTemplate.fromMessages([
+  ["system", "你是客服助手，参考以下示例回答问题。"],
+  ...await fewShotPrompt.formatMessages({}),  // 动态插入最相关的示例
+  ["human", "{input}"],
+]);
+
+const chain = finalPrompt.pipe(model);
+
+const result = await chain.invoke({
+  input: "需要几天送达",
+});
+
+console.log(result.content);
+
 
