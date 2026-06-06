@@ -1,7 +1,6 @@
 // 动态插入历史消息
 
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
-import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import model from "@/agent/index.js";
 
