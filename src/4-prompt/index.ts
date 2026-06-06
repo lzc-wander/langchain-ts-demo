@@ -30,7 +30,7 @@ export const codeReviewPrompt = ChatPromptTemplate.fromMessages([
 - 性能问题
 - 遵循 {language} 最佳实践
 
-请用中文回复，格式：问题描述 → 原因 → 建议改法。`,
+请用中文回复，格式：问题描述: → 原因: → 改进思路:`,
   ],
   ["human", "请审查以下 {language} 代码：\n\n{code}"],
 ]);
