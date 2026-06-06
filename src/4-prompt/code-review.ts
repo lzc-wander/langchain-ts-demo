@@ -1,3 +1,4 @@
+// 代码审查示例，使用集中定义的 Prompt
 import { codeReviewPrompt } from "@/4-prompt/index";
 import model from "@/agent/index.js";
 
