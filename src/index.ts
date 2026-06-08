@@ -4,13 +4,17 @@ import { AIMessage, createAgent } from "langchain";
 import { getWeather } from "./tools/weather.js";
 import { getTime } from "./tools/time.js";
 import model from "@/agent/index.js";
+import toolErrorHandler from "./middleware/tool-error-handler.js";
+
 
 
 // 创建的模型作为model参数传给createAgent
 const agent = createAgent({
   model,
   tools: [getWeather, getTime],
-});
+  middleware: [toolErrorHandler],
+  // 其他配置...
+ });
 
 
 // 使用 stream() 替代 invoke()
