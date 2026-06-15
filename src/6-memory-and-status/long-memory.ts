@@ -11,6 +11,7 @@ const embeddings = new AlibabaTongyiEmbeddings({
   modelName: "text-embedding-v3",
   apiKey: process.env.ALIBABA_TONGYI_API_KEY,
 });
+
 const memoryStore = new MemoryVectorStore(embeddings);
 
 
