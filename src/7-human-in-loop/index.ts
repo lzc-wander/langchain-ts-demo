@@ -7,16 +7,18 @@ import * as readline from "node:readline/promises";
 
 const deleteData = tool(
   async ({ recordId }) => {
-    // 发起中断，等待人工确认
+    // 发起中断，等待人工输入验证码
     // 第一次执行：无 resume 值，interrupt 抛出 GraphInterrupt → 图暂停
-    // 恢复执行：interrupt() 返回 resume 值
-    const confirmed = await interrupt({
-      question: `确认删除记录 ${recordId}？此操作不可撤销。`,
-      type: "confirm",
+    // 恢复执行：interrupt() 返回用户输入的 resume 值
+    const code = await interrupt({
+      question: "请输入验证码：",
+      type: "input",
     });
 
-    if (confirmed !== "confirmed") {
-      return "操作已取消";
+    // 验证码校验（演示用固定值，生产环境应动态生成）
+    const expectedCode = "123456";
+    if (code !== expectedCode) {
+      return `验证码错误，操作已取消（输入: ${code}，期望: ${expectedCode}）`;
     }
 
     console.log(`删除记录 ${recordId}`);
@@ -24,7 +26,7 @@ const deleteData = tool(
   },
   {
     name: "delete_data",
-    description: "删除指定记录（需要人工确认）",
+    description: "删除指定记录（需要人工输入验证码确认）",
     schema: z.object({ 
       recordId: z.string().describe("要删除的记录 ID") 
     }),
@@ -49,20 +51,18 @@ const result1 = await agent.invoke(
 
 console.log("[Agent 回复]:", result1.messages.at(-1)?.content);
 
-// 第2步：人工确认
+// 第2步：人工输入验证码
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
 
-const answer = await rl.question("\n确认删除？输入 y 确认，其他任意键取消: ");
+const answer = await rl.question("\n请输入验证码（正确验证码为 123456）: ");
 rl.close();
 
-// 第3步：用字符串 resume 值恢复
-const resumeValue = answer.toLowerCase() === "y" ? "confirmed" : "cancelled";
-
-const result2 = await agent.invoke(
-  new Command({ resume: resumeValue }),
+// 第3步：将用户输入的验证码作为 resume 值传入
+const result2 = await agent.graph.invoke(
+  new Command({ resume: answer }),
   config
 );
 
