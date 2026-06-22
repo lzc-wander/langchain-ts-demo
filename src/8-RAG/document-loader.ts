@@ -1,5 +1,9 @@
+// 使用通义的嵌入模型
+import "dotenv/config";
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { AlibabaTongyiEmbeddings } from "@langchain/community/embeddings/alibaba_tongyi"; 
+import { MemoryVectorStore } from "@langchain/classic/vectorstores/memory"; // 内存向量存储， 临时使用内存存储向量数据， 线上环境需要使用数据库存储
 
 const pdfLoader = new PDFLoader("./src/docs/1.pdf");
 const pdfDocs = await pdfLoader.load();
@@ -23,4 +27,25 @@ const splitter = new RecursiveCharacterTextSplitter({
 
 const chunks = await splitter.splitDocuments(pdfDocs);
 
-console.log(chunks);
+// 初始化向量存储（作为长期记忆库）------------
+const embeddings = new AlibabaTongyiEmbeddings({
+  modelName: "text-embedding-v3",
+  apiKey: process.env.ALIBABA_TONGYI_API_KEY,
+  batchSize: 10,  // 通义 API 单次最多 10 条
+});
+
+const vectorStore = new MemoryVectorStore(embeddings);
+await vectorStore.addDocuments(chunks);
+
+// 从向量存储创建检索器
+const retriever = vectorStore.asRetriever({
+  k: 5,  // 返回最相似的 5 个文档
+});
+
+// 执行检索
+const docs = await retriever.invoke("申请公租房注意事项是什么");
+
+console.log(docs.length);  // 5
+console.log(docs[0].pageContent);  // 最相关的文档内容
+console.log(docs[0].metadata);     // 元数据（来源、页码等）
+
