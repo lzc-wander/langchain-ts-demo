@@ -4,12 +4,12 @@ import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { AlibabaTongyiEmbeddings } from "@langchain/community/embeddings/alibaba_tongyi"; 
 import { MemoryVectorStore } from "@langchain/classic/vectorstores/memory"; // 内存向量存储， 临时使用内存存储向量数据， 线上环境需要使用数据库存储
+import { rewriteQuery } from "@/8-RAG/query-rewrite";
 
 const pdfLoader = new PDFLoader("./src/docs/1.pdf");
 const pdfDocs = await pdfLoader.load();
 
 // console.log(pdfDocs);
-
 
 const splitter = new RecursiveCharacterTextSplitter({
   chunkSize: 1000,       // 每个 chunk 的最大字符数
@@ -42,8 +42,10 @@ const retriever = vectorStore.asRetriever({
   k: 5,  // 返回最相似的 5 个文档
 });
 
+
+
 // 执行检索
-const docs = await retriever.invoke("申请公租房注意事项是什么");
+const docs = await retriever.invoke(await rewriteQuery("申请注意事项是什么"));
 
 console.log(docs.length);  // 5
 console.log(docs[0].pageContent);  // 最相关的文档内容
