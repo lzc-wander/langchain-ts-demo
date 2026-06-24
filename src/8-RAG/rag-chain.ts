@@ -24,7 +24,7 @@ console.log(`切割为 ${chunks.length} 个 chunks`);
 
 // ===== 3. 向量化存储 =====
 const embeddings = new AlibabaTongyiEmbeddings({
-  modelName: "text-embedding-v3",
+  modelName: "text-embedding-v1",
   apiKey: process.env.ALIBABA_TONGYI_API_KEY,
   batchSize: 10,
 });

@@ -86,6 +86,7 @@ export async function retrieveKnowledge(query: string) {
     throw new Error("知识库未初始化，请先调用 initializeKnowledgeBase()");
   }
   const docs = await retriever.invoke(query);
+  
   return {
     docs,
     formatted: formatDocs(docs),
