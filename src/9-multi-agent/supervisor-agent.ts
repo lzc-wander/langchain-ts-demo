@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { StateGraph, MessagesAnnotation, Annotation } from "@langchain/langgraph";
-import { createAgent, HumanMessage } from "langchain";
+import { AIMessage, BaseMessage, createAgent, HumanMessage } from "langchain";
 import model from '@/agent'
 
 // 定义包含路由信息的状态
@@ -10,8 +10,8 @@ const SupervisorState = Annotation.Root({
 
   // 下一个要执行的 Agent 名称
   nextAgent: Annotation<string>({
-    reducer: (_, next) => next,  // 直接覆盖
-    default: () => "supervisor", // 默认从 Supervisor 开始
+    reducer: (_, next) => next,
+    default: () => "supervisor",
   }),
 
   // 任务进度追踪
@@ -19,7 +19,64 @@ const SupervisorState = Annotation.Root({
     reducer: (_, next) => next,
     default: () => "",
   }),
+
+  // ---- 错误恢复相关字段 ----
+
+  // 各 Agent 的失败次数
+  errorCount: Annotation<Record<string, number>>({
+    reducer: (current, next) => ({ ...current, ...next }),
+    default: () => ({}),
+  }),
+
+  // 最后一次错误消息
+  lastError: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => "",
+  }),
 });
+
+const MAX_RETRIES = 2; // 每个 Agent 最多重试次数
+
+/** 用 try/catch 包裹 worker 节点，失败时记录错误并返回错误消息 */
+function withErrorHandling(
+  name: string,
+  run: (messages: BaseMessage[]) => Promise<{ messages: BaseMessage[] }>
+) {
+  return async (state: typeof SupervisorState.State) => {
+    const currentFails = state.errorCount?.[name] ?? 0;
+
+    if (currentFails >= MAX_RETRIES) {
+      const msg = `[跳过] ${name} 已失败 ${currentFails} 次，超过最大重试次数`;
+      console.log(`  ⚠️ ${msg}`);
+      return {
+        messages: [new AIMessage(`[系统] ${msg}，任务已移交给下一步处理。`)],
+        errorCount: { [name]: currentFails },
+        lastError: msg,
+      };
+    }
+
+    console.log(`[${name}] 开始工作...`);
+    try {
+      const result = await run(state.messages);
+      console.log(`[${name}] 工作完成`);
+      return {
+        messages: result.messages,
+        lastError: "",
+      };
+    } catch (error) {
+      const newFails = currentFails + 1;
+      const errorMsg = `${name} 执行失败（第 ${newFails} 次）: ${error instanceof Error ? error.message : "未知错误"}`;
+      console.error(`  ❌ ${errorMsg}`);
+
+      return {
+        messages: [new AIMessage(`[系统] ${errorMsg}，将重试（剩余 ${MAX_RETRIES - newFails} 次）。`)],
+        errorCount: { [name]: newFails },
+        nextAgent: "supervisor",
+        lastError: errorMsg,
+      };
+    }
+  };
+}
 
 // 研究员 Agent：负责搜集信息
 const researchAgent = createAgent({
@@ -82,6 +139,8 @@ async function supervisorNode(state: typeof SupervisorState.State) {
 当前任务进度：
 ${state.taskProgress || "尚未开始"}
 
+${state.lastError ? `最近错误：${state.lastError}\n` : ""}
+
 最近对话：
 ${state.messages.slice(-3).map(m => {
     const role = m._getType?.() ?? "unknown";
@@ -107,52 +166,11 @@ ${state.messages.slice(-3).map(m => {
   };
 }
 
-// ------------------------实现worker节点------------------------
+// ------------------------实现worker节点（带错误恢复）------------------------
 
-// 研究员节点
-async function researchNode(state: typeof SupervisorState.State) {
-  console.log("[Researcher] 开始研究工作...");
-  
-  const result = await researchAgent.invoke({ 
-    messages: state.messages 
-  });
-  
-  console.log("[Researcher] 研究完成");
-  
-  return { 
-    messages: result.messages,
-  };
-}
-
-// 作家节点
-async function writerNode(state: typeof SupervisorState.State) {
-  console.log("[Writer] 开始写作...");
-  
-  const result = await writerAgent.invoke({ 
-    messages: state.messages 
-  });
-  
-  console.log("[Writer] 写作完成");
-  
-  return { 
-    messages: result.messages,
-  };
-}
-
-// 编辑节点
-async function editorNode(state: typeof SupervisorState.State) {
-  console.log("[Editor] 开始审核...");
-  
-  const result = await editorAgent.invoke({ 
-    messages: state.messages 
-  });
-  
-  console.log("[Editor] 审核完成");
-  
-  return { 
-    messages: result.messages,
-  };
-}
+const researchNode = withErrorHandling("研究员", (msgs) => researchAgent.invoke({ messages: msgs }));
+const writerNode = withErrorHandling("作家", (msgs) => writerAgent.invoke({ messages: msgs }));
+const editorNode = withErrorHandling("编辑", (msgs) => editorAgent.invoke({ messages: msgs }));
 
 
 // ------------------------构建工作流------------------------
@@ -194,7 +212,7 @@ const workflow = new StateGraph(SupervisorState)
     __end__: "__end__",
   })
   
-  // Worker 完成后返回 Supervisor
+  // Worker 完成后返回 Supervisor（静态边确保永远回到协调者）
   .addEdge("research", "supervisor")
   .addEdge("writer", "supervisor")
   .addEdge("editor", "supervisor");
@@ -210,7 +228,7 @@ console.log("=".repeat(50) + "\n");
 
 // 执行多 Agent 系统
 const result = await multiAgentApp.invoke({
-  messages: [new HumanMessage("写一篇关于AI前沿技术的报道")],
+  messages: [new HumanMessage("写一篇长沙一日游攻略文章")],
 });
 
 console.log("\n" + "=".repeat(50));
