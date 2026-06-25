@@ -1,98 +1,125 @@
 import "dotenv/config";
 import { StateGraph, Annotation } from "@langchain/langgraph";
 import { AIMessage, BaseMessage, HumanMessage, createAgent } from "langchain";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
+import { StringOutputParser } from "@langchain/core/output_parsers";
 
 import model from "@/agent";
+
+// 用 LLM 从用户输入中提取城市名
+const cityExtractPrompt = ChatPromptTemplate.fromMessages([
+  ["system", "你是一个城市提取助手。从用户的问题中提取出目的地城市名称，只输出城市名，不要输出任何其他内容。如果未提及城市，输出'北京'。"],
+  ["human", "{input}"],
+]);
+const cityExtractor = cityExtractPrompt.pipe(model).pipe(new StringOutputParser());
 
 // 定义包含多个子任务结果的状态
 const ParallelState = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
-    reducer: (current, next) => [...current, ...next],
+    reducer: (current, next) => [...current, ...next], // 每次节点返回新消息时， 追加 到现有消息列表尾部
     default: () => [],
   }),
   taskResults: Annotation<Record<string, string>>({
-    reducer: (current, next) => ({ ...current, ...next }),
+    reducer: (current, next) => ({ ...current, ...next }), // 每次节点返回新结果时， 合并 到现有结果对象中
     default: () => ({}),
   }),
 });
 
 // 创建专门的 Agent（无工具，纯知识回答）
-const weatherAgent = createAgent({
+const attractionAgent = createAgent({
   model,
   tools: [],
-  name: "weather_agent",
-  systemPrompt: "你是天气专家，请根据自身知识回答天气相关问题。回答要具体、包含季节特点和出行建议。",
+  name: "attraction_agent",
+  systemPrompt: `你是景点推荐专家，请根据自身知识推荐目的地景点信息。
+回答需包含：
+1. 必去景点及特点
+2. 最佳游览时间
+3. 门票价格参考
+4. 游玩时长建议
+回答要具体、有细节。`,
 });
 
-const trafficAgent = createAgent({
+const foodAgent = createAgent({
   model,
   tools: [],
-  name: "traffic_agent",
-  systemPrompt: "你是交通专家，请根据自身知识回答路况和交通信息。包含高峰时段、拥堵路段和出行建议。",
+  name: "food_agent",
+  systemPrompt: `你是美食推荐专家，请根据自身知识推荐目的地美食。
+回答需包含：
+1. 特色餐厅推荐（含菜系和招牌菜）
+2. 当地小吃和夜市推荐
+3. 人均消费参考
+4. 适合的用餐时段`,
 });
 
-const eventsAgent = createAgent({
+const routeAgent = createAgent({
   model,
   tools: [],
-  name: "events_agent",
-  systemPrompt: "你是活动专家，请根据自身知识回答当地活动信息。包含适合的户外/室内活动推荐。",
+  name: "route_agent",
+  systemPrompt: `你是行程规划专家，请根据自身知识规划出行路线。
+回答需包含：
+1. 推荐的游玩路线（按天/半天规划）
+2. 交通方式建议（地铁/公交/打车）
+3. 景点之间的衔接时间
+4. 注意事项和实用贴士`,
 });
 
 // 并行执行多个 Agent
 async function parallelNode(state: typeof ParallelState.State) {
   const userQuery = state.messages.at(-1)?.content as string;
-  
-  console.log("🔍 正在并行查询：天气、路况、活动...");
-  
-  const [weatherResult, trafficResult, eventsResult] = await Promise.all([
-    weatherAgent.invoke({
-      messages: [{ role: "user", content: `查询北京的天气：${userQuery}` }],
+
+  // 用 LLM 从用户输入中提取城市名
+  const city = await cityExtractor.invoke({ input: userQuery });
+
+  console.log(`🔍 正在并行查询 ${city} 的景点、美食、路线...`);
+
+  const [attractionResult, foodResult, routeResult] = await Promise.all([
+    attractionAgent.invoke({
+      messages: [{ role: "user", content: `推荐${city}的景点：${userQuery}` }],
     }),
-    trafficAgent.invoke({
-      messages: [{ role: "user", content: `查询北京的路况：${userQuery}` }],
+    foodAgent.invoke({
+      messages: [{ role: "user", content: `推荐${city}的美食：${userQuery}` }],
     }),
-    eventsAgent.invoke({
-      messages: [{ role: "user", content: `查询北京的活动：${userQuery}` }],
+    routeAgent.invoke({
+      messages: [{ role: "user", content: `规划${city}的路线：${userQuery}` }],
     }),
   ]);
-  
-  console.log("✅ 并行查询完成\n");
+
+  console.log(`✅ ${city} 并行查询完成\n`);
 
   return {
     taskResults: {
-      weather: weatherResult.messages.at(-1)?.content as string,
-      traffic: trafficResult.messages.at(-1)?.content as string,
-      events: eventsResult.messages.at(-1)?.content as string,
+      attractions: attractionResult.messages.at(-1)?.content as string,
+      food: foodResult.messages.at(-1)?.content as string,
+      route: routeResult.messages.at(-1)?.content as string,
     },
   };
 }
 
 // 汇总节点
 async function mergeNode(state: typeof ParallelState.State) {
+  const { attractions, food, route } = state.taskResults;
 
-  const { weather, traffic, events } = state.taskResults;
+  console.log("📝 正在整合生成出行攻略...");
 
-  console.log("📝 正在整合信息生成综合建议...");
-  
-  const summaryPrompt = `请整合以下信息，给用户一个综合建议：
+  const summaryPrompt = `请整合以下信息，给用户一份完整的出行攻略：
 
-天气情况：
-${weather}
+景点推荐：
+${attractions}
 
-路况信息：
-${traffic}
+美食推荐：
+${food}
 
-当地活动：
-${events}
+路线规划：
+${route}
 
-请给出出行建议。`;
+请整合成一份结构清晰、实用的一日游攻略，包含：上午行程、午餐推荐、下午行程、晚餐推荐、实用贴士。`;
 
   const response = await model.invoke([
-    { role: "system", content: "你是一个综合出行顾问，整合天气、路况和活动信息给出实用建议。" },
+    { role: "system", content: "你是一个专业旅行规划师，整合景点、美食和路线信息给出一份实用的出行攻略。" },
     { role: "user", content: summaryPrompt },
   ]);
 
-  console.log("✅ 整合完成\n");
+  console.log("✅ 攻略生成完成\n");
 
   return {
     messages: [new AIMessage(response.content as string)],
@@ -110,15 +137,15 @@ const workflow = new StateGraph(ParallelState)
 const parallelApp = workflow.compile();
 
 console.log("=".repeat(50));
-console.log("  并行多 Agent 工作流");
-console.log("  流程: [天气 + 路况 + 活动] → 汇总");
+console.log("  并行多 Agent — 出行路由攻略");
+console.log("  流程: [景点 + 美食 + 路线] → 整合攻略");
 console.log("=".repeat(50) + "\n");
 
 const result = await parallelApp.invoke({
-  messages: [new HumanMessage("明天适合出门吗？有什么建议？")],
+  messages: [new HumanMessage("给我一份重庆一日游攻略")],
 });
 
 console.log("\n" + "=".repeat(50));
-console.log("  综合建议");
+console.log("  出行攻略");
 console.log("=".repeat(50) + "\n");
 console.log(result.messages.at(-1)?.content);
