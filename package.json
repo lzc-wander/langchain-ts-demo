@@ -37,6 +37,7 @@
     "langchain": "^1.4.2",
     "langsmith": "^0.7.5",
     "pdf-parse": "^2.4.5",
+    "tiktoken": "^1.0.22",
     "zod": "^4.4.3"
   }
 }

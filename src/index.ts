@@ -6,6 +6,7 @@ import { getTime } from "./tools/time.js";
 import model from "@/agent/index.js";
 import toolErrorHandler from "./middleware/tool-error-handler.js";
 import loggingMiddleware from "./middleware/logging.js";
+import tokenBudgetMiddleware from "./middleware/token-budget.js";
 import { fetchWebpage } from "./tools/fetch-web-page.js";
 
 
@@ -14,7 +15,7 @@ import { fetchWebpage } from "./tools/fetch-web-page.js";
 const agent = createAgent({
   model,
   tools: [getWeather, getTime, fetchWebpage], 
-  middleware: [toolErrorHandler, loggingMiddleware],
+  middleware: [toolErrorHandler, loggingMiddleware, tokenBudgetMiddleware],
   // 其他配置...
  });
 
